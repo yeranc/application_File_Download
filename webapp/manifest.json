@@ -1,0 +1,126 @@
+{
+  "_version": "1.60.0",
+  "sap.app": {
+    "id": "zal11.down.zfiledownload",
+    "type": "application",
+    "i18n": "i18n/i18n.properties",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "resources": "resources.json",
+    "sourceTemplate": {
+      "id": "@sap/generator-fiori:basic",
+      "version": "1.20.4",
+      "toolsId": "2eafe392-b895-4de8-82bf-4fe5f36a2c49"
+    },
+    "dataSources": {
+      "ZSB_AL11_FILE_V2_VAN": {
+        "uri": "/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/Annotations(TechnicalName='ZSB_AL11_FILE_V2_VAN',Version='0001')/$value/",
+        "type": "ODataAnnotation",
+        "settings": {
+          "localUri": "localService/mainService/ZSB_AL11_FILE_V2_VAN.xml"
+        }
+      },
+      "ZSB_AL11_FILE_V2": {
+        "uri": "/sap/opu/odata/sap/ZSB_AL11_FILE_V2/",
+        "type": "OData",
+        "settings": {
+          "annotations": [
+            "ZSB_AL11_FILE_V2_VAN"
+          ],
+          "localUri": "localService/mainService/metadata.xml",
+          "odataVersion": "2.0"
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "",
+      "favIcon": "",
+      "phone": "",
+      "phone@2": "",
+      "tablet": "",
+      "tablet@2": ""
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "flexEnabled": true,
+    "dependencies": {
+      "minUI5Version": "1.120.14",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.ui.comp": {}
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "zal11.down.zfiledownload.i18n.i18n"
+        }
+      },
+      "AL11Files": {
+        "dataSource": "ZSB_AL11_FILE_V2",
+        "preload": true,
+        "settings": {
+      "useBatch": false
+    }
+      }
+    },
+    "resources": {
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "controlAggregation": "pages",
+        "controlId": "app",
+        "transition": "slide",
+        "type": "View",
+        "viewType": "XML",
+        "path": "zal11.down.zfiledownload.view",
+        "async": true,
+        "viewPath": "zal11.down.zfiledownload.view"
+      },
+      "routes": [
+        {
+          "name": "RouteApp",
+          "pattern": ":?query:",
+          "target": [
+            "TargetApp"
+          ]
+        }
+      ],
+      "targets": {
+        "TargetApp": {
+          "id": "Home",
+          "name": "Home"
+        }
+      }
+    },
+    "rootView": {
+      "viewName": "zal11.down.zfiledownload.view.App",
+      "type": "XML",
+      "id": "app",
+      "async": true
+    }
+  }
+}

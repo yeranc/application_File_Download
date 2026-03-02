@@ -1,0 +1,6 @@
+<mvc:View controllerName="zal11.down.zfiledownload.controller.App"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+    <App id="app">
+    </App>
+</mvc:View>

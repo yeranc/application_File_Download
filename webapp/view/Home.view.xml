@@ -1,0 +1,53 @@
+<mvc:View
+    controllerName="zal11.down.zfiledownload.controller.Home"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:smartTable="sap.ui.comp.smarttable"
+    xmlns:smartFilterBar="sap.ui.comp.smartfilterbar">
+    <Page title="Application File Downloader">
+        <subHeader>
+            <OverflowToolbar>
+                <Label text="Directory:" required="true"/>
+                <Input
+                    width="20rem"
+                    placeholder="/tmp"
+                    value="{viewModel>/directory}"
+                    class="sapUiSmallMarginEnd" />
+
+                <Label text="Created On:"/>
+                <DatePicker
+                    value="{viewModel>/createdOn}"
+                    displayFormat="dd.MM.yyyy"
+                    width="10rem"
+                    class="sapUiSmallMarginEnd" />
+
+                <Button
+                    text="Go"
+                    type="Emphasized"
+                    press="onSearch"/>
+
+                <ToolbarSpacer/>
+
+                <Button
+                    text="Download"
+                    icon="sap-icon://download"
+                    press="onDownload"/>
+            </OverflowToolbar>
+        </subHeader>
+
+        <content>
+            <smartTable:SmartTable
+                id="smartTable"
+                entitySet="FileDownloader"
+                tableType="ResponsiveTable"
+                useVariantManagement="true"
+                useTablePersonalisation="true"
+                header="Files"
+                showRowCount="true"
+                enableAutoBinding="false"
+                demandPopin="true"
+                class="sapUiResponsiveContentPadding">
+            </smartTable:SmartTable>
+        </content>
+    </Page>
+</mvc:View>
