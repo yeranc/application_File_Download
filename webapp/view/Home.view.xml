@@ -16,8 +16,10 @@
 
                 <Label text="Created On:"/>
                 <DatePicker
+                    id="datePicker"
                     value="{viewModel>/createdOn}"
-                    displayFormat="dd.MM.yyyy"
+                    displayFormat="dd.MM.YYYY"
+                    valueFormat="yyyy-MM-dd"
                     width="10rem"
                     class="sapUiSmallMarginEnd" />
 

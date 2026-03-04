@@ -4,11 +4,191 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "sap/m/MessageBox",
-    "sap/ui/core/BusyIndicator"
-], function (Controller, JSONModel, Filter, FilterOperator, MessageBox, BusyIndicator) {
+    "sap/ui/core/BusyIndicator",
+    "sap/m/MessageToast"
+], function (Controller, JSONModel, Filter, FilterOperator, MessageBox, BusyIndicator, MessageToast) {
     "use strict";
- 
+    const DL_BASE = "/sap/opu/odata/sap/ZUI_FILE_DOWN";
+
     return Controller.extend("zal11.down.zfiledownload.controller.Home", {
-         
+        /**
+         * Lifecycle hook – called when controller is initialized.
+         */
+        onInit: function () {
+            const oViewModel = new JSONModel({
+                directory: "/tmp",
+                createdOn: ""
+            });
+            this.getView().setModel(oViewModel, "viewModel");
+
+            const oModel = this.getOwnerComponent().getModel("AL11Files");
+            this.getView().setModel(oModel);
+
+            const oSmartTable = this.byId("smartTable");
+
+            // Attach beforeRebind handler once - ensures filters are applied every time table rebinds
+            oSmartTable.attachBeforeRebindTable(this._onBeforeRebindTable, this);
+
+            // Wait until SmartTable creates inner table to enable multiselect
+            oSmartTable.attachInitialise(function () {
+                const oTable = oSmartTable.getTable();
+                oTable.setMode("MultiSelect");
+            });
+        },
+
+        /**
+         * SmartTable beforeRebind handler.
+         * This method dynamically builds filters based on latest UI values.
+         * It runs automatically every time rebindTable() is triggered.
+         */
+        _onBeforeRebindTable: function (oEvent) {
+            const oBindingParams = oEvent.getParameter("bindingParams");
+            const oViewModel = this.getView().getModel("viewModel");
+            const sDirectory = oViewModel.getProperty("/directory");
+            const oDatePicker = this.byId("datePicker");
+            const oSelectedDate = oDatePicker.getDateValue();
+
+            const aFilters = [];
+
+            if (sDirectory) {
+                aFilters.push(new Filter("Directory", FilterOperator.EQ, sDirectory));
+            }
+
+            // Creates date in UTC range: 00:00:00 to 23:59:59 as GUI follows UTC
+            if (oSelectedDate) {
+                const oFromDate = new Date(Date.UTC(
+                    oSelectedDate.getFullYear(),
+                    oSelectedDate.getMonth(),
+                    oSelectedDate.getDate(),
+                    0, 0, 0
+                ));
+                const oToDate = new Date(Date.UTC(
+                    oSelectedDate.getFullYear(),
+                    oSelectedDate.getMonth(),
+                    oSelectedDate.getDate(),
+                    23, 59, 59
+                ));
+
+                aFilters.push(new Filter({
+                    filters: [
+                        new Filter("Created_Raw", FilterOperator.GE, oFromDate),
+                        new Filter("Created_Raw", FilterOperator.LE, oToDate)
+                    ],
+                    and: true
+                }));
+            }
+
+            // Assign the filters to bindingParams
+            oBindingParams.filters = aFilters;
+        },
+
+        /**
+         * Search button handler.
+         * Validates input and triggers SmartTable rebind.
+         */
+        onSearch: function () {
+            const oViewModel = this.getView().getModel("viewModel");
+            const sDirectory = oViewModel.getProperty("/directory");
+
+            if (!sDirectory) {
+                MessageBox.error("Please enter a directory.");
+                return;
+            }
+
+            // Trigger rebind — filters handled in _onBeforeRebindTable
+            this.byId("smartTable").rebindTable();
+        },
+
+        _getSelectedFileContexts: function () {
+            const oSmartTable = this.byId("smartTable");
+            const oTable = oSmartTable.getTable();
+            const aSelectedItems = oTable.getSelectedItems();
+            return aSelectedItems
+                .map(item => item.getBindingContext())
+                .filter(Boolean);
+        },
+
+        onDownload: async function () {
+            const selectedFiles = this._getSelectedFileContexts();
+            if (!selectedFiles.length) {
+                MessageToast.show("Select at least one file.");
+                return;
+            }
+
+            const files = selectedFiles.map((oContext) => {
+                const oObject = oContext.getObject();
+                const sPath = oContext.getPath();
+                const oMatch = sPath.match(/File_Size=(\d+)/);
+                return {
+                    ...oObject,
+                    File_Size: oMatch ? parseInt(oMatch[1], 10) : null   // Include the file size
+                };
+            });
+
+            BusyIndicator.show(0);
+            try {
+                await withSilencedConsole(async () => {
+                    if (files.length === 1) {
+                        const blob = await fetchBlobSmart(files[0]);
+                        saveBlob(blob, files[0].NAME || "file");
+                        return;
+                    }
+                    const JSZip = await ensureJSZip(); const zip = new JSZip();
+                    for (const f of files) {
+                        const b = await fetchBlobSmart(f);
+                        zip.file(f.NAME || "file", b);
+                    }
+                    const zipBlob = await zip.generateAsync({ type: "blob" });
+                    saveBlob(zipBlob, `files_${timestamp()}.zip`);
+                });
+            } catch (e) { MessageToast.show(e.message || "Download failed"); }
+            finally { BusyIndicator.hide(); }
+        },
     });
+
+    async function tryFetchBlob(url) {
+        const res = await fetch(url, { method: "POST", credentials: "include", headers: { "Accept": "application/octet-stream" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+    }
+    async function fetchBlobSmart(file) {
+        const { File_Name, File_Path, File_Size } = file;
+        const candidates = [buildStrictUrl(File_Name, File_Path, File_Size)];
+        let lastErr;
+        for (const c of candidates) {
+            try {
+                return await tryFetchBlob(c);
+            }
+            catch (e) {
+                lastErr = e;
+            }
+        }
+        throw new Error(`Download failed (${lastErr && lastErr.message || "unknown"})`);
+    }
+    async function withSilencedConsole(fn) {
+        const origErr = console.error, origWarn = console.warn;
+        try {
+            console.error = function () { };
+            console.warn = function () { };
+            return await fn();
+        }
+        finally {
+            console.error = origErr;
+            console.warn = origWarn;
+        }
+    }
+    function buildStrictUrl(name, path, size) {
+        const enc = (s) => encodeURIComponent(String(s));
+        return `/sap/opu/odata/sap/ZSB_AL11_FILE_V2/get_Results?sap-client=800`
+            + `&File_Name='${enc(name)}'`
+            + `&File_Path='${enc(path)}'`
+            + `&File_Size=${size || 0}`;
+    }
+    function saveBlob(blob, filename) {
+        const a = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        a.href = url; a.download = filename || "file";
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+    }
 });
