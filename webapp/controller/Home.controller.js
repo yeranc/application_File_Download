@@ -12,8 +12,8 @@ sap.ui.define([
 
     return Controller.extend("zal11.down.zfiledownload.controller.Home", {
         /**
-         * Lifecycle hook – called when controller is initialized.
-         */
+                 * Lifecycle hook – called when controller is initialized.
+                          */
         onInit: function () {
             const oViewModel = new JSONModel({
                 directory: "/tmp",
@@ -37,10 +37,10 @@ sap.ui.define([
         },
 
         /**
-         * SmartTable beforeRebind handler.
-         * This method dynamically builds filters based on latest UI values.
-         * It runs automatically every time rebindTable() is triggered.
-         */
+                 * SmartTable beforeRebind handler.
+                          * This method dynamically builds filters based on latest UI values.
+                                   * It runs automatically every time rebindTable() is triggered.
+                                            */
         _onBeforeRebindTable: function (oEvent) {
             const oBindingParams = oEvent.getParameter("bindingParams");
             const oViewModel = this.getView().getModel("viewModel");
@@ -83,9 +83,9 @@ sap.ui.define([
         },
 
         /**
-         * Search button handler.
-         * Validates input and triggers SmartTable rebind.
-         */
+                 * Search button handler.
+                          * Validates input and triggers SmartTable rebind.
+                                   */
         onSearch: function () {
             const oViewModel = this.getView().getModel("viewModel");
             const sDirectory = oViewModel.getProperty("/directory");
@@ -127,55 +127,111 @@ sap.ui.define([
 
             BusyIndicator.show(0);
             try {
-                await withSilencedConsole(async () => {
-                    if (files.length === 1) {
-                        const blob = await fetchBlobSmart(files[0]);
-                        saveBlob(blob, files[0].NAME || "file");
-                        return;
-                    }
-                    const JSZip = await ensureJSZip(); const zip = new JSZip();
-                    for (const f of files) {
-                        const b = await fetchBlobSmart(f);
-                        zip.file(f.NAME || "file", b);
-                    }
-                    const zipBlob = await zip.generateAsync({ type: "blob" });
-                    saveBlob(zipBlob, `files_${timestamp()}.zip`);
-                });
-            } catch (e) { MessageToast.show(e.message || "Download failed"); }
-            finally { BusyIndicator.hide(); }
+                // Fetch CSRF token once, pass it to all downloads
+                const sCsrfToken = await fetchCsrfToken();
+
+                if (files.length === 1) {
+                    const blob = await fetchBlobSmart(files[0], sCsrfToken);
+                    saveBlob(blob, files[0].File_Name || "file");
+                    return;
+                }
+                const JSZip = await ensureJSZip();
+                const zip = new JSZip();
+                for (const f of files) {
+                    const b = await fetchBlobSmart(f, sCsrfToken);
+                    zip.file(f.File_Name || "file", b);
+                }
+                const zipBlob = await zip.generateAsync({ type: "blob" });
+                saveBlob(zipBlob, `files_${timestamp()}.zip`);
+
+            } catch (e) {
+                MessageToast.show(e.message || "Download failed");
+            } finally {
+                BusyIndicator.hide();
+            }
         },
     });
-
-    async function tryFetchBlob(url) {
-        const res = await fetch(url, { method: "POST", credentials: "include", headers: { "Accept": "application/octet-stream" } });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.blob();
+    async function fetchCsrfToken() {
+        return new Promise((resolve, reject) => {
+            jQuery.ajax({
+                url: "/sap/opu/odata/sap/ZSB_AL11_FILE_V2/",
+                method: "GET",
+                headers: { "X-CSRF-Token": "Fetch" },
+                success: function (data, status, xhr) {
+                    const sToken = xhr.getResponseHeader("X-CSRF-Token");
+                    sToken ? resolve(sToken) : reject(new Error("CSRF token not returned."));
+                },
+                error: reject
+            });
+        });
     }
-    async function fetchBlobSmart(file) {
+    async function tryFetchBlob(url, sCsrfToken) {
+        return new Promise((resolve, reject) => {
+            jQuery.ajax({
+                url: url,
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": sCsrfToken,
+                    "Accept": "application/xml"
+                },
+                success: function (oData) {
+                    const sXml = (typeof oData !== "string")
+                        ? new XMLSerializer().serializeToString(oData)
+                        : oData;
+
+                    const oXmlDoc = new DOMParser().parseFromString(sXml, "application/xml");
+                    const getTagText = (tag) => {
+                        const tags = oXmlDoc.getElementsByTagName("*");
+                        for (let i = 0; i < tags.length; i++) {
+                            if (tags[i].localName === tag) return tags[i].textContent;
+                        }
+                        return "";
+                    };
+
+                    const sBase64Raw = getTagText("Attachment");
+                    if (!sBase64Raw) {
+                        reject(new Error("No attachment data in response"));
+                        return;
+                    }
+
+                    // Strip whitespace — SAP sometimes line-wraps base64 in XML
+                    const sBase64 = sBase64Raw.replace(/\s+/g, "");
+
+                    let sBinary;
+                    try {
+                        sBinary = atob(sBase64);
+                    } catch (e) {
+                        reject(new Error("Base64 decode failed: " + e.message));
+                        return;
+                    }
+
+                    // Convert binary string to Uint8Array
+                    const aBytes = new Uint8Array(sBinary.length);
+                    for (let i = 0; i < sBinary.length; i++) {
+                        aBytes[i] = sBinary.charCodeAt(i);
+                    }
+
+                    resolve(new Blob([aBytes], { type: "application/octet-stream" }));
+                },
+                error: function (oXhr) {
+                    reject(new Error(`HTTP ${oXhr.status}: ${oXhr.statusText}`));
+                }
+            });
+        });
+    }
+    async function fetchBlobSmart(file, sCsrfToken) {
         const { File_Name, File_Path, File_Size } = file;
         const candidates = [buildStrictUrl(File_Name, File_Path, File_Size)];
         let lastErr;
         for (const c of candidates) {
             try {
-                return await tryFetchBlob(c);
+                return await tryFetchBlob(c, sCsrfToken);
             }
             catch (e) {
                 lastErr = e;
             }
         }
         throw new Error(`Download failed (${lastErr && lastErr.message || "unknown"})`);
-    }
-    async function withSilencedConsole(fn) {
-        const origErr = console.error, origWarn = console.warn;
-        try {
-            console.error = function () { };
-            console.warn = function () { };
-            return await fn();
-        }
-        finally {
-            console.error = origErr;
-            console.warn = origWarn;
-        }
     }
     function buildStrictUrl(name, path, size) {
         const enc = (s) => encodeURIComponent(String(s));
