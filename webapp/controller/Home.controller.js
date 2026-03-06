@@ -278,8 +278,13 @@ sap.ui.define([
         if (window.JSZip) return Promise.resolve(window.JSZip);
         return new Promise(function (resolve, reject) {
             const s = document.createElement("script");
-            s.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
-            s.onload = () => resolve(window.JSZip);
+            // Get the zip library from the libs folder under webapp
+            s.src = sap.ui.require.toUrl("zal11/down/zfiledownload") + "/libs/jszip.min.js";
+            s.onload = function () {
+                window.JSZip
+                    ? resolve(window.JSZip)
+                    : reject(new Error("JSZip loaded but not available on window"));
+            };
             s.onerror = () => reject(new Error("Failed to load JSZip"));
             document.head.appendChild(s);
         });

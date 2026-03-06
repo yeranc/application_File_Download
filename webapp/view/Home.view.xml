@@ -3,18 +3,19 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
     xmlns:smartTable="sap.ui.comp.smarttable"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"
     xmlns:smartFilterBar="sap.ui.comp.smartfilterbar">
-    <Page title="Application File Downloader">
+    <Page title="{i18n>appTitle}">
         <subHeader>
             <OverflowToolbar>
-                <Label text="Directory:" required="true"/>
+                <Label text="{i18n>directory}:" required="true"/>
                 <Input
                     width="20rem"
                     placeholder="/tmp"
                     value="{viewModel>/directory}"
                     class="sapUiSmallMarginEnd" />
 
-                <Label text="Created On:"/>
+                <Label text="{i18n>createdOn}:"/>
                 <DatePicker
                     id="datePicker"
                     value="{viewModel>/createdOn}"
@@ -24,14 +25,14 @@
                     class="sapUiSmallMarginEnd" />
 
                 <Button
-                    text="Go"
+                    text="{i18n>goButton}"
                     type="Emphasized"
                     press="onSearch"/>
 
                 <ToolbarSpacer/>
 
                 <Button
-                    text="Download"
+                    text="{i18n>downloadButton}"
                     icon="sap-icon://download"
                     press="onDownload"/>
             </OverflowToolbar>
@@ -44,7 +45,8 @@
                 tableType="ResponsiveTable"
                 useVariantManagement="true"
                 useTablePersonalisation="true"
-                header="Files"
+                app:p13nDialogSettings="{sort:{visible:false}, group:{visible:false}, filter:{visible:false}}"
+                header="{i18n>files}"
                 showRowCount="true"
                 enableAutoBinding="false"
                 demandPopin="true"
