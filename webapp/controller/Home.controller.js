@@ -8,12 +8,11 @@ sap.ui.define([
     "sap/m/MessageToast"
 ], function (Controller, JSONModel, Filter, FilterOperator, MessageBox, BusyIndicator, MessageToast) {
     "use strict";
-    const DL_BASE = "/sap/opu/odata/sap/ZUI_FILE_DOWN";
 
     return Controller.extend("zal11.down.zfiledownload.controller.Home", {
         /**
-                 * Lifecycle hook – called when controller is initialized.
-                          */
+        * Lifecycle hook – called when controller is initialized.
+        */
         onInit: function () {
             const oViewModel = new JSONModel({
                 directory: "/tmp",
@@ -23,6 +22,9 @@ sap.ui.define([
 
             const oModel = this.getOwnerComponent().getModel("AL11Files");
             this.getView().setModel(oModel);
+
+            // Get the service URL from the AL11Files Model
+            this._sServiceUrl = oModel.sServiceUrl.replace(/\/$/, "");
 
             const oSmartTable = this.byId("smartTable");
 
@@ -37,10 +39,10 @@ sap.ui.define([
         },
 
         /**
-                 * SmartTable beforeRebind handler.
-                          * This method dynamically builds filters based on latest UI values.
-                                   * It runs automatically every time rebindTable() is triggered.
-                                            */
+        * SmartTable beforeRebind handler.
+        * This method dynamically builds filters based on latest UI values.
+        * It runs automatically every time rebindTable() is triggered.
+        */
         _onBeforeRebindTable: function (oEvent) {
             const oBindingParams = oEvent.getParameter("bindingParams");
             const oViewModel = this.getView().getModel("viewModel");
@@ -80,12 +82,15 @@ sap.ui.define([
 
             // Assign the filters to bindingParams
             oBindingParams.filters = aFilters;
+
+            oBindingParams.parameters = oBindingParams.parameters || {};
+            oBindingParams.parameters.countMode = "Inline";
         },
 
         /**
-                 * Search button handler.
-                          * Validates input and triggers SmartTable rebind.
-                                   */
+        * Search button handler.
+        * Validates input and triggers SmartTable rebind.
+        */
         onSearch: function () {
             const oViewModel = this.getView().getModel("viewModel");
             const sDirectory = oViewModel.getProperty("/directory");
@@ -109,6 +114,7 @@ sap.ui.define([
         },
 
         onDownload: async function () {
+            const sServiceUrl = this._sServiceUrl;
             const selectedFiles = this._getSelectedFileContexts();
             if (!selectedFiles.length) {
                 MessageToast.show("Select at least one file.");
@@ -128,40 +134,54 @@ sap.ui.define([
             BusyIndicator.show(0);
             try {
                 // Fetch CSRF token once, pass it to all downloads
-                const sCsrfToken = await fetchCsrfToken();
+                const sCsrfToken = await fetchCsrfToken(sServiceUrl);
 
                 if (files.length === 1) {
-                    const blob = await fetchBlobSmart(files[0], sCsrfToken);
+                    const blob = await fetchBlobSmart(files[0], sCsrfToken, sServiceUrl);
                     saveBlob(blob, files[0].File_Name || "file");
+                    MessageToast.show(`File "${files[0].File_Name}" downloaded successfully`);
                     return;
                 }
                 const JSZip = await ensureJSZip();
                 const zip = new JSZip();
                 for (const f of files) {
-                    const b = await fetchBlobSmart(f, sCsrfToken);
+                    const b = await fetchBlobSmart(f, sCsrfToken, sServiceUrl);
                     zip.file(f.File_Name || "file", b);
                 }
                 const zipBlob = await zip.generateAsync({ type: "blob" });
                 saveBlob(zipBlob, `files_${timestamp()}.zip`);
+                MessageToast.show(`${files.length} files downloaded successfully`);
 
             } catch (e) {
-                MessageToast.show(e.message || "Download failed");
+                if (e && e.isFileNotExists) {
+                    const sFileName = files.length === 1 ? files[0].File_Name : (e.fileName || "");
+                    MessageBox.error(`File "${sFileName}" couldn't be opened.`);
+                } else {
+                    MessageToast.show("Download failed: " + (e.message || ""));
+                }
             } finally {
                 BusyIndicator.hide();
             }
         },
     });
-    async function fetchCsrfToken() {
+    async function fetchCsrfToken(sServiceUrl) {
         return new Promise((resolve, reject) => {
             jQuery.ajax({
-                url: "/sap/opu/odata/sap/ZSB_AL11_FILE_V2/",
+                url: `${sServiceUrl}/`,
                 method: "GET",
                 headers: { "X-CSRF-Token": "Fetch" },
                 success: function (data, status, xhr) {
                     const sToken = xhr.getResponseHeader("X-CSRF-Token");
                     sToken ? resolve(sToken) : reject(new Error("CSRF token not returned."));
                 },
-                error: reject
+                error: function (oXhr) {
+                    let message = "Error fetching the CSRF Token";
+                    try {
+                        const json = JSON.parse(oXhr.responseText);
+                        message = json.error.message.value;
+                    } catch (e) { }
+                    reject(new Error(message));
+                }
             });
         });
     }
@@ -214,14 +234,21 @@ sap.ui.define([
                     resolve(new Blob([aBytes], { type: "application/octet-stream" }));
                 },
                 error: function (oXhr) {
+                    const sResponse = oXhr.responseText || "";
+                    if (sResponse.includes("DATASET_NOT_OPEN")) {
+                        const oErr = new Error("FILE_NOT_EXISTS");
+                        oErr.isFileNotExists = true;
+                        reject(oErr);
+                        return;
+                    }
                     reject(new Error(`HTTP ${oXhr.status}: ${oXhr.statusText}`));
                 }
             });
         });
     }
-    async function fetchBlobSmart(file, sCsrfToken) {
+    async function fetchBlobSmart(file, sCsrfToken, sServiceUrl) {
         const { File_Name, File_Path, File_Size } = file;
-        const candidates = [buildStrictUrl(File_Name, File_Path, File_Size)];
+        const candidates = [buildStrictUrl(sServiceUrl, File_Name, File_Path, File_Size)];
         let lastErr;
         for (const c of candidates) {
             try {
@@ -231,11 +258,11 @@ sap.ui.define([
                 lastErr = e;
             }
         }
-        throw new Error(`Download failed (${lastErr && lastErr.message || "unknown"})`);
+        throw lastErr;
     }
-    function buildStrictUrl(name, path, size) {
+    function buildStrictUrl(sServiceUrl, name, path, size) {
         const enc = (s) => encodeURIComponent(String(s));
-        return `/sap/opu/odata/sap/ZSB_AL11_FILE_V2/get_Results?sap-client=800`
+        return `${sServiceUrl}/get_Results?`
             + `&File_Name='${enc(name)}'`
             + `&File_Path='${enc(path)}'`
             + `&File_Size=${size || 0}`;
@@ -246,5 +273,19 @@ sap.ui.define([
         a.href = url; a.download = filename || "file";
         document.body.appendChild(a); a.click(); a.remove();
         URL.revokeObjectURL(url);
+    }
+    function ensureJSZip() {
+        if (window.JSZip) return Promise.resolve(window.JSZip);
+        return new Promise(function (resolve, reject) {
+            const s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+            s.onload = () => resolve(window.JSZip);
+            s.onerror = () => reject(new Error("Failed to load JSZip"));
+            document.head.appendChild(s);
+        });
+    }
+    function timestamp() {
+        const d = new Date(); const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     }
 });
