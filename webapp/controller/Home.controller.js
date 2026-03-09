@@ -15,7 +15,7 @@ sap.ui.define([
         */
         onInit: function () {
             const oViewModel = new JSONModel({
-                directory: "/tmp",
+                directory: "/interface/Outbound",
                 createdOn: ""
             });
             this.getView().setModel(oViewModel, "viewModel");
@@ -96,7 +96,7 @@ sap.ui.define([
             const sDirectory = oViewModel.getProperty("/directory");
 
             if (!sDirectory) {
-                MessageBox.error("Please enter a directory.");
+                MessageBox.warning("Please enter a directory.");
                 return;
             }
 
@@ -154,8 +154,9 @@ sap.ui.define([
 
             } catch (e) {
                 if (e && e.isFileNotExists) {
-                    const sFileName = files.length === 1 ? files[0].File_Name : (e.fileName || "");
-                    MessageBox.error(`File "${sFileName}" couldn't be opened.`);
+                    // const sFileName = files.length === 1 ? files[0].File_Name : (e.fileName || "");
+                    const sFileName = e.fileName || "";
+                    MessageBox.warning(`File "${sFileName}" couldn't be downloaded from Application Server.`);
                 } else {
                     MessageToast.show("Download failed: " + (e.message || ""));
                 }
@@ -235,7 +236,7 @@ sap.ui.define([
                 },
                 error: function (oXhr) {
                     const sResponse = oXhr.responseText || "";
-                    if (sResponse.includes("DATASET_NOT_OPEN")) {
+                    if (sResponse.includes("DATASET_NOT_OPEN")||oXhr.status === 500) {
                         const oErr = new Error("FILE_NOT_EXISTS");
                         oErr.isFileNotExists = true;
                         reject(oErr);
@@ -255,6 +256,7 @@ sap.ui.define([
                 return await tryFetchBlob(c, sCsrfToken);
             }
             catch (e) {
+                e.fileName = File_Name;
                 lastErr = e;
             }
         }
