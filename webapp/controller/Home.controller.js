@@ -15,7 +15,7 @@ sap.ui.define([
         */
         onInit: function () {
             const oViewModel = new JSONModel({
-                directory: "/interface/Outbound",
+                directory: "",
                 createdOn: ""
             });
             this.getView().setModel(oViewModel, "viewModel");
@@ -35,6 +35,13 @@ sap.ui.define([
             oSmartTable.attachInitialise(function () {
                 const oTable = oSmartTable.getTable();
                 oTable.setMode("MultiSelect");
+
+                // Enable growing property to smarttable
+                oTable.setGrowing(true);
+                oTable.setGrowingThreshold(100);
+                oTable.setGrowingScrollToLoad(true);
+
+                oTable.setSticky(["ColumnHeaders"]);    // Make the header sticky
             });
         },
 
@@ -236,7 +243,7 @@ sap.ui.define([
                 },
                 error: function (oXhr) {
                     const sResponse = oXhr.responseText || "";
-                    if (sResponse.includes("DATASET_NOT_OPEN")||oXhr.status === 500) {
+                    if (sResponse.includes("DATASET_NOT_OPEN") || oXhr.status === 500) {
                         const oErr = new Error("FILE_NOT_EXISTS");
                         oErr.isFileNotExists = true;
                         reject(oErr);

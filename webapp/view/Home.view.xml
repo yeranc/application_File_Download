@@ -11,7 +11,7 @@
                 <Label text="{i18n>directory}:" required="true"/>
                 <Input
                     width="20rem"
-                    placeholder="/tmp"
+                    placeholder="/interface/Outbound"
                     value="{viewModel>/directory}"
                     class="sapUiSmallMarginEnd" />
 
@@ -45,7 +45,7 @@
                 tableType="ResponsiveTable"
                 useVariantManagement="true"
                 useTablePersonalisation="true"
-                app:p13nDialogSettings="{sort:{visible:false}, group:{visible:false}, filter:{visible:false}}"
+                app:p13nDialogSettings="{sort:{visible:true}, group:{visible:false}, filter:{visible:false}}"
                 header="{i18n>files}"
                 showRowCount="true"
                 enableAutoBinding="false"
