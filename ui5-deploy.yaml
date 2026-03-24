@@ -20,7 +20,7 @@ builder:
         app:
           name: ZTMNFDOWNLOAD
           description: Application File Downloader
-          package: ZYCA_PACKAGE
-          transport: T30K902457
+          package: ZTMC
+          transport: T30K902478
         exclude:
           - /test/
